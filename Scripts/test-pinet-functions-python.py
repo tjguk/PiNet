@@ -3,6 +3,26 @@ import tempfile
 import unittest
 pinet_functions = __import__("pinet-functions-python")
 
+class MockFile(object):
+    
+    def __init__(self, lines):
+        self.lines = lines
+        self.iterline = iter(lines)
+    
+    def readline():
+        try:
+            return next(self.iterline)
+        except StopIteration:
+            return None
+
+def MockOpen(object):
+    
+    def __init__(self, lines):
+        self.lines = lines
+    
+    def __call__(self, filepath):
+        return MockFile(self.lines)
+
 class TestPiNet(unittest.TestCase):
     
     pass
@@ -28,6 +48,10 @@ class TestSupportFunctions(TestPiNet):
         self.assertEqual([l.rstrip("\n") for l in self.LINES], pinet_functions.removeN(self.LINES))
     
     def test_blankLineRemover(self):
+        #
+        # Strictly, at the moment this function only removes lines which contain nothing
+        # but spaces. It ignores lines which contain nothing!
+        #
         lines = ["Line 1", " Line 2 ", "", " "]
         self.assertEqual(["Line 1", " Line 2 "], pinet_functions.blankLineRemover(lines))
 
