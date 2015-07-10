@@ -123,17 +123,18 @@ def downloadFile(url="http://bit.ly/pinetinstall1", saveloc="/dev/null"):
     """
     import traceback
     import urllib.request
+    import urllib.error
     req = urllib.request.Request(url)
     req.add_header('User-agent', 'Mozilla 5.10')
     try:
         with urllib.request.urlopen(req) as f:
-            text_file = open(saveloc, "wb")
-            text_file.write(f.read())
-            text_file.close()
+            with open(saveloc, "wb") as text_file:
+                text_file.write(f.read())
             return True
-    except:
-        print (traceback.format_exc())
+    except urllib.error.URLError:
+        print(traceback.format_exc())
         return False
+
 triggerInstall = downloadFile
 
 def stripStartWhitespaces(filelist):
@@ -163,9 +164,7 @@ def compareVersions(local, web):
     """
     Compares 2 version numbers to decide if an update is required.
     """
-    local_version = tuple(int(i) for i in local.split("."))
-    web_version = tuple(int(i) for i in web.split("."))
-    web_is_newer = web_version > local_version
+    web_is_newer = tuple(int(i) for i in web.split(".")) > tuple(int(i) for i in local.split("."))
     returnData(web_is_newer)
     return web_is_newer
 
@@ -190,24 +189,17 @@ def readReturn():
 
 #----------------Whiptail functions-----------------
 def whiptailBox(type, title, message, returnTF ,height = "8", width= "78"):
-    cmd = ["whiptail", "--title", title, "--"+type, message, height, width]
-    p = Popen(cmd,  stderr=PIPE)
-    out, err = p.communicate()
-
-    if returnTF:
-        if p.returncode == 0:
-            return True
-        elif p.returncode == 1:
-            return False
-        else:
-            return "ERROR"
+    cmd = ["whiptail", "--title", title, "--" + type, message, height, width]
+    try:
+        subprocess.check_call(cmd)
+    except subprocess.CalledProcessError as exc:
+        return False if returnTF else exc.returncode 
     else:
-        return p.returncode
+        return True if returnTF else exc.returncode 
 
 def whiptailSelectMenu(title, message, items):
     height, width, other = "16", "78", "5"
     cmd = ["whiptail", "--title", title, "--menu", message ,height, width, other]
-    itemsList = ""
     for x in range(0, len(items)):
         cmd.append(items[x])
         cmd.append("a")
@@ -562,6 +554,9 @@ def _test(*args, **kwargs):
 #------------------------------Main program-------------------------
 
 def main(command=None, *args):
+    """Dispatch on command name, passing all remaining parameter to the
+    module-level function.
+    """
     if not command:
         print("This python script does nothing on its own, it must be passed stuff")
         return
@@ -573,7 +568,7 @@ def main(command=None, *args):
     except AttributeError:
         print("No such command: {}".format(command))
     
-    function(*args)
+    return function(*args)
 
 if __name__ == '__main__':
-    main(*sys.argv[1:])
+    sys.exit(main(*sys.argv[1:]))
