@@ -115,6 +115,7 @@ def getReleaseChannel(configFilepath="/etc/pinet"):
     else:
         return "master"
 
+
 def downloadFile(url="http://bit.ly/pinetinstall1", saveloc="/dev/null"):
     """
     Downloads a file from the internet using a standard browser header.
@@ -181,30 +182,17 @@ def compareVersions(local, web):
 CompareVersion = compareVersions
 
 def getConfigParameter(filep, searchfor):
-    textFile = getTextFile(filep)
-    textFile = stripEndWhitespaces(textFile)
-    value = ""
-    for i in range(0,len(textFile)):
-        #print(textFile[i])
-        found = textFile[i].find(searchfor)
-        if (found != -1):
-            #print(textFile[i])
-            bob = found+len(searchfor)
-            jill = len(searchfor)
-            value = textFile[i][found+len(searchfor):len(textFile[i])]
+    with open(filep) as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith(searchfor):
+                return line[len(searchfor):]
+        else:
+            return 0
 
-    if value == "":
-        value = "None"
-
-    return value
-
-#def selectFile(start = "/home/"+os.environ['SUDO_USER']+"/"):
-#    pass
 def returnData(data):
     with open(DATA_TRANSFER_FILEPATH, "w+") as text_file:
         text_file.write(str(data))
-    return
-    #return fileLoc
 
 def readReturn():
     with open(DATA_TRANSFER_FILEPATH, "r") as text_file:
@@ -253,9 +241,11 @@ def replaceLineOrAdd(file, string, newString):
     Pass it a text file in list form and it will search for strings.
     If it finds a string, it will replace that entire line with newString
     """
-    textfile = getList(file)
-    textfile = findReplaceAnyLine(textfile, string, newString)
-    writeTextFile(textfile, file)
+    with open(file) as inf:
+        lines = [l.strip() for l in inf]
+    with open(file, "w") as outf:
+        lines = [newString if l == string else l for l in lines]
+        outf.writelines(l + "\n" for l in lines)
 
 def replaceBitOrAdd(file, string, newString):
     """
@@ -263,9 +253,10 @@ def replaceBitOrAdd(file, string, newString):
     Pass it a text file in list form and it will search for strings.
     If it finds a string, it will replace that exact string with newString
     """
-    textfile = getList(file)
-    textfile = findReplaceSection(textfile, string, newString)
-    writeTextFile(textfile, file)
+    with open(file) as inf:
+        lines = [l.replace(string, newString) for l in inf]
+    with open(file, "w") as outf:
+        outf.writelines(lines)
 
 def internet_on(timeoutLimit, returnType = True):
     """

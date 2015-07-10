@@ -93,8 +93,7 @@ class TestSupportFunctions(TestPiNet):
         for channel, branch in branches.items():
             with open(filepath, "w") as f:
                 f.write("ReleaseChannel=%s\n" % channel)
-            pinet_functions.getReleaseChannel(filepath)
-            self.assertEqual(pinet_functions.ReleaseBranch, branch)
+            self.assertEqual(pinet_functions.getReleaseChannel(filepath), branch)
 
     def test_stripStartWhitespaces(self):
         lines = list(self.LINES)
@@ -159,7 +158,7 @@ class TestConfigParameter(TestPiNet):
         self.assertEqual(pinet_functions.getConfigParameter(self.filepath, "version="), "1234")
 
     def test_getConfigParameter_not_present(self):
-        self.assertEqual(pinet_functions.getConfigParameter(self.filepath, "not-present="), "None")
+        self.assertEqual(pinet_functions.getConfigParameter(self.filepath, "not-present="), 0)
 
 class TestFileOperations(TestPiNet):
     
