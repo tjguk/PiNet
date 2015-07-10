@@ -90,7 +90,7 @@ def findReplaceSection(textFile, string, newString):
     Pass it a text file in list form and it will search for strings.
     If it finds a string, it will replace that exact string with newString
     """
-    return [line.replace(string, newString) for line in textFile)
+    return [line.replace(string, newString) for line in textFile]
  
 def getReleaseChannel(configFilepath="/etc/pinet"):
     Channel = "Stable"
@@ -98,7 +98,7 @@ def getReleaseChannel(configFilepath="/etc/pinet"):
         configFile = getList(configFilepath)
     except FileNotFoundError:
         return "dev"
-        
+
     search_for = "ReleaseChannel"
     for line in configFile:
         if line.startswith(search_for):
