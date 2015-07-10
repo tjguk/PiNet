@@ -18,11 +18,13 @@ import sys, os
 from subprocess import Popen, PIPE
 import time
 import urllib.request, urllib.error
+import xml.etree.ElementTree as ET
 
 DATA_TRANSFER_FILEPATH = "/tmp/ltsptmp"
 PINET_CONF_FILEPATH = "/etc/pinet"
 
-RepositoryBase="https://github.com/pinet/"
+RepositoryBase = "https://github.com/pinet/"
+CommitsFeed = "https://github.com/PiNet/PiNet/commits/{ReleaseBranch}.atom"
 RepositoryName="pinet"
 RawRepositoryBase="https://raw.github.com/pinet/"
 Repository=RepositoryBase + RepositoryName
@@ -306,8 +308,7 @@ def checkUpdate2():
     downloadFile("http://bit.ly/pinetcheckmaster", temp_filepath)
     from xml.dom import minidom
     xmldoc = minidom.parse(temp_filepath)
-    version = xmldoc.getElementsByTagName('title')[1].firstChild.nodeValue
-    version = cleanStrings([version,])[0]
+    version = xmldoc.getElementsByTagName('title')[1].firstChild.nodeValue.strip()
     if version.find("Release") != -1:
         version = version[8:len(version)]
         print(version)
@@ -321,32 +322,28 @@ def GetVersionNum(data):
             return item[1 + len("Release"):]
 
 def checkUpdate(currentVersion):
-    ReleaseBranch = getReleaseChannel()
     if not internet_on(5, False):
         print("No Internet Connection")
         returnData(0)
+    
     import feedparser
-    import xml.etree.ElementTree
-    downloadFile("http://bit.ly/pinetCheckCommits", "/dev/null")
-    d = feedparser.parse(Repository +'/commits/' +ReleaseBranch + '.atom')
-    releases = []
-    data = (d.entries[0].content[0].get('value'))
-    data = ''.join(xml.etree.ElementTree.fromstring(data).itertext())
-    data = data.split("\n")
-    thisVersion = GetVersionNum(data)
-    #thisVersion = data[0].rstrip()
-    #thisVersion = thisVersion[8:len(thisVersion)]
-
+    feed = feedparser.parse(CommitsFeed.format(ReleaseBranch=getReleaseChannel()))
+    for entry in feed.entries:
+        for c in entry.content:
+            lines = " ".join(ET.fromstring(c.get("value", "")).itertext()).split("\n")
+            thisVersion = GetVersionNum(lines)
+            break
+    else:
+        raise RuntimeError("Unable to determine version")
+    
     if compareVersions(currentVersion, thisVersion):
         whiptailBox("msgbox", "Update detected", "An update has been detected for PiNet. Select OK to view the Release History.", False)
         displayChangeLog(currentVersion)
     else:
         print("No updates found")
-        #print(thisVersion)
-        #print(currentVersion)
         returnData(0)
-CheckUpdate = checkUpdate
 
+CheckUpdate = checkUpdate
 
 def checkKernelFileUpdateWeb():
     ReleaseBranch = getReleaseChannel()
