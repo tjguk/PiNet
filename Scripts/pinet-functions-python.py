@@ -27,7 +27,7 @@ RawRepositoryBase="https://raw.github.com/pinet/"
 Repository=RepositoryBase + RepositoryName
 RawRepository=RawRepositoryBase + RepositoryName
 
-def lines(filepath):
+def lines_from_file(filepath):
     with open(filepath) as f:
         for line in f:
             yield line.strip()
@@ -103,7 +103,7 @@ def findReplaceSection(textFile, string, newString):
 def getReleaseChannel(configFilepath="/etc/pinet"):
     Channel = "Stable"
     try:
-        configFile = getList(configFilepath)
+        configFile = lines_from_file(configFilepath)
     except FileNotFoundError:
         return "dev"
 
@@ -176,13 +176,9 @@ def compareVersions(local, web):
 CompareVersion = compareVersions
 
 def getConfigParameter(filep, searchfor):
-    with open(filep) as f:
-        for line in f:
-            line = line.strip()
-            if line.startswith(searchfor):
-                return line[len(searchfor):]
-        else:
-            return None
+    for line in lines_from_file(filep):
+        if line.startswith(searchfor):
+            return line[len(searchfor):]
 
 def returnData(data):
     with open(DATA_TRANSFER_FILEPATH, "w+") as text_file:
@@ -228,11 +224,9 @@ def replaceLineOrAdd(file, string, newString):
     Pass it a text file in list form and it will search for strings.
     If it finds a string, it will replace that entire line with newString
     """
-    with open(file) as inf:
-        lines = [l.strip() for l in inf]
+    new_lines = [newString if l == string else l for l in lines_from_file(file)]
     with open(file, "w") as outf:
-        lines = [newString if l == string else l for l in lines]
-        outf.writelines(l + "\n" for l in lines)
+        outf.writelines(l + "\n" for l in new_lines)
 
 def replaceBitOrAdd(file, string, newString):
     """

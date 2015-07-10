@@ -23,7 +23,7 @@ def _internet_is_available():
         return False
     else:
         return True
-internet_is_available = _internet_is_available()
+internet_is_available = False ## _internet_is_available()
 
 class TestPiNet(unittest.TestCase):
    
@@ -51,6 +51,9 @@ class TestSupportFunctions(TestPiNet):
         self.filepath = tempfile.mktemp()
         with open(self.filepath, "w") as f:
             f.writelines(self.LINES)
+
+    def test_lines_from_file(self):
+        self.assertEqual(["Line 1", "Line 2", "Line 3", ""], list(pinet_functions.lines_from_file(self.filepath)))
     
     def test_getTextFile(self):
         self.assertEqual(self.LINES, pinet_functions.getTextFile(self.filepath))
