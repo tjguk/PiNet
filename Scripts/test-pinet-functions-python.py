@@ -1,3 +1,4 @@
+#!python3
 import tempfile
 import unittest
 pinet_functions = __import__("pinet-functions-python")
@@ -27,7 +28,8 @@ class TestSupportFunctions(TestPiNet):
         self.assertEqual([l.rstrip("\n") for l in self.LINES], pinet_functions.removeN(self.LINES))
     
     def test_blankLineRemover(self):
-        self.assertEqual(["Line 1", "Line 2", "Line 3"], pinet_functions.blankLineRemover(self.LINES))
+        lines = ["Line 1", " Line 2 ", "", " "]
+        self.assertEqual(["Line 1", " Line 2 "], pinet_functions.blankLineRemover(lines))
 
     def test_writeTextFile(self):
         filepath = tempfile.mktemp()

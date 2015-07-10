@@ -51,7 +51,7 @@ def blankLineRemover(filelist):
     """
     Removes blank lines in the file.
     """
-    return [line.strip() for line in filelist if line.strip()]
+    return [line for line in filelist if line.strip()]
 
 def writeTextFile(filelist, name):
     """
