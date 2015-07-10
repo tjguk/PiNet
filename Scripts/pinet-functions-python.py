@@ -23,24 +23,6 @@ RepositoryName="pinet"
 RawRepositoryBase="https://raw.github.com/pinet/"
 Repository=RepositoryBase + RepositoryName
 RawRepository=RawRepositoryBase + RepositoryName
-ReleaseBranch = "master"
-
-def getReleaseChannel():
-    Channel = "Stable"
-    configFile = getList("/etc/pinet")
-    for i in range(0, len(configFile)):
-        if configFile[i][0:14] == "ReleaseChannel":
-            Channel = configFile[i][15:len(configFile[i])]
-            break
-
-    global ReleaseBranch
-    if Channel == "Stable":
-        ReleaseBranch = "master"
-    elif Channel == "Dev":
-        ReleaseBranch = "dev"
-    else:
-        ReleaseBranch = "master"
-
 
 def getTextFile(filep):
     """
@@ -56,47 +38,20 @@ def getTextFile(filep):
     Each line is a new object in the list
 
     """
-    file = open(filep)
-    filelist = []
-    while 1:
-        line = file.readline()
-        if not line:
-            break
-        filelist.append(line) #Go through entire SVG file and import it into a list
-    return filelist
+    with open(filep) as f:
+        return list(f)
 
 def removeN(filelist):
     """
     Removes the final character from every line, this is always /n, aka newline character.
     """
-    for count in range(0, len(filelist)):
-        filelist[count] = filelist[count][0: (len(filelist[count]))-1]
-    return filelist
+    return [line.rstrip("\n") for line in filelist]
 
 def blankLineRemover(filelist):
     """
     Removes blank lines in the file.
     """
-    toremove = [ ]
-    #toremove.append(len(filelist))
-    for count in range(0, len(filelist)): #Go through each line in the text file
-        found = False
-        for i in range(0, len(filelist[count])): #Go through each char in the line
-            if not (filelist[count][i] == " "):
-                found = True
-        if found == False:
-            toremove.append(count)
-
-    #toremove.append(len(filelist))
-    toremove1 = []
-    for i in reversed(toremove):
-        toremove1.append(i)
-
-
-    for r in range(0, len(toremove)):
-        filelist.pop(toremove1[r])
-        debug("just removed " + str(toremove1[r]))
-    return filelist
+    return [line.strip() for line in filelist if line.strip()]
 
 def writeTextFile(filelist, name):
     """
@@ -104,12 +59,9 @@ def writeTextFile(filelist, name):
     Adds a newline character (\n) to the end of every sublist in the file.
     Then writes the string to the text file.
     """
-    file = open(name, 'w')
-    mainstr = ""
-    for i in range(0, len(filelist)):
-        mainstr = mainstr + filelist[i] + "\n"
-    file.write(mainstr)
-    file.close()
+    with open(name, "w") as f:
+        f.writelines(line + "\n" for line in filelist)
+    
     info("")
     info("------------------------")
     info("File generated")
@@ -121,7 +73,8 @@ def getList(file):
     """
     Creates list from the passed text file with each line a new object in the list
     """
-    return removeN(getTextFile(file))
+    with open(file) as f:
+        return [l.strip("\n") for l in f]
 
 def findReplaceAnyLine(textFile, string, newString):
     """
@@ -129,16 +82,7 @@ def findReplaceAnyLine(textFile, string, newString):
     Pass it a text file in list form and it will search for strings.
     If it finds a string, it will replace the entire line with newString
     """
-    unfound = True
-    for i in range(0,len(textFile)):
-        found = textFile[i].find(string)
-        if (found != -1):
-            textFile[i] = newString
-            unfound = False
-    if unfound:
-        textFile.append(newString)
-
-    return textFile
+    return [newString if string in line else line for line in textFile]
 
 def findReplaceSection(textFile, string, newString):
     """
@@ -146,49 +90,59 @@ def findReplaceSection(textFile, string, newString):
     Pass it a text file in list form and it will search for strings.
     If it finds a string, it will replace that exact string with newString
     """
-    for i in range(0, len(textFile)):
-        found = textFile[i].find(string)
-        if (found != -1):
-            before = textFile[i][0:found]
-            after = textFile[i][found+len(string):len(textFile[i])]
-            textFile[i] = before+newString+after
-    return textFile
+    return [line.replace(string, newString) for line in textFile)
+ 
+def getReleaseChannel(configFilepath="/etc/pinet"):
+    Channel = "Stable"
+    try:
+        configFile = getList(configFilepath)
+    except FileNotFoundError:
+        return "dev"
+        
+    search_for = "ReleaseChannel"
+    for line in configFile:
+        if line.startswith(search_for):
+            Channel = line[1 + len(search_for):]
+            break
 
+    if Channel == "Stable":
+        return "master"
+    elif Channel == "Dev":
+        return "dev"
+    else:
+        return "master"
 
-def downloadFile(url, saveloc):
+def downloadFile(url="http://bit.ly/pinetinstall1", saveloc="/dev/null"):
     """
     Downloads a file from the internet using a standard browser header.
     Custom header is required to allow access to all pages.
     """
     import traceback
+    import urllib.request
+    req = urllib.request.Request(url)
+    req.add_header('User-agent', 'Mozilla 5.10')
     try:
-        import urllib.request
-        req = urllib.request.Request(url)
-        req.add_header('User-agent', 'Mozilla 5.10')
-        f = urllib.request.urlopen(req)
-        text_file = open(saveloc, "wb")
-        text_file.write(f.read())
-        text_file.close()
-        return True
+        with urllib.request.urlopen(req) as f:
+            text_file = open(saveloc, "wb")
+            text_file.write(f.read())
+            text_file.close()
+            return True
     except:
         print (traceback.format_exc())
         return False
+triggerInstall = downloadFile
 
 def stripStartWhitespaces(filelist):
     """
     Remove whitespace from start of every line in list.
     """
-    for i in range(0, len(filelist)):
-        filelist[i] = str(filelist[i]).lstrip()
-    return filelist
+    return [l.lstrip() for l in filelist]
 
 def stripEndWhitespaces(filelist):
     """
     Remove whitespace from end of every line in list.
     """
-    for i in range(0, len(filelist)):
-        filelist[i] = str(filelist[i]).rstrip()
-    return filelist
+    return [l.rstrip() for l in filelist]
 
 def cleanStrings(filelist):
     """
@@ -221,6 +175,7 @@ def compareVersions(local, web):
             else:
                 returnData(0)
                 return False
+CompareVersion = compareVersions
 
 def getConfigParameter(filep, searchfor):
     textFile = getTextFile(filep)
@@ -331,11 +286,13 @@ def internet_on(timeoutLimit, returnType = True):
     #print("Reached end, no internet")
     returnData(1)
     return False
+CheckInternet = internet_on
 
 def updatePiNet():
     """
     Fetches most recent PiNet and PiNet-functions-python.py
     """
+    ReleaseBranch = getReleaseChannel()
     try:
         os.remove("/home/"+os.environ['SUDO_USER']+"/pinet")
     except: pass
@@ -392,6 +349,7 @@ def GetVersionNum(data):
 
 
 def checkUpdate(currentVersion):
+    ReleaseBranch = getReleaseChannel()
     if not internet_on(5, False):
         print("No Internet Connection")
         returnData(0)
@@ -415,10 +373,11 @@ def checkUpdate(currentVersion):
         #print(thisVersion)
         #print(currentVersion)
         returnData(0)
-
+CheckUpdate = checkUpdate
 
 
 def checkKernelFileUpdateWeb():
+    ReleaseBranch = getReleaseChannel()
     downloadFile(RawRepository +"/" + ReleaseBranch + "/boot/version.txt", "/tmp/kernelVersion.txt")
     import os.path
     user=os.environ['SUDO_USER']
@@ -436,6 +395,7 @@ def checkKernelFileUpdateWeb():
         returnData(0)
 
 def checkKernelUpdater():
+    ReleaseBranch = getReleaseChannel()
     downloadFile(RawRepository +"/" + ReleaseBranch + "/Scripts/kernelCheckUpdate.sh", "/tmp/kernelCheckUpdate.sh")
 
     import os.path
@@ -463,9 +423,8 @@ def installCheckKernelUpdater():
     process = Popen(['ltsp-chroot', '--arch', 'armhf', 'update-rc.d', 'kernelCheckUpdate.sh', 'defaults'], stdout=PIPE, stderr=PIPE, stdin=PIPE)
     process.communicate()
 
-#def importUsers():
-
 def displayChangeLog(version):
+    ReleaseBranch = getReleaseChannel()
     version = "Release " + version
     import feedparser
     import xml.etree.ElementTree
@@ -610,53 +569,27 @@ def checkIfFileContains(file, string):
     """
     Simple function to check if a string exists in a file.
     """
+    with open(file) as f:
+        returnData(int(any(string in line for line in f)))
 
-    textfile = getList(file)
-    unfound = True
-    for i in range(0,len(textfile)):
-        found = textfile[i].find(string)
-        #print("Searching line number " + str(i) + ". Found status is " + str(found))
-        #print(textfile[i])
-        #print("")
-        if (found != -1):
-            unfound = False
-
-    if unfound:
-        returnData(0)
-    else:
-        returnData(1)
+def _test(*args, **kwargs):
+    print("_test", args, kwargs)
+    
 #------------------------------Main program-------------------------
 
-getReleaseChannel()
-if len(sys.argv) == 1:
-    print("This python script does nothing on its own, it must be passed stuff")
+def main(command=None, *args):
+    if not command:
+        print("This python script does nothing on its own, it must be passed stuff")
+        return
 
+    mod = sys.modules['__main__']
+    print(mod)
+    try:
+        function = getattr(mod, command)
+    except AttributeError:
+        print("No such command: {}".format(command))
+    
+    function(*args)
 
-
-else:
-    if sys.argv[1] == "replaceLineOrAdd":
-        replaceLineOrAdd(sys.argv[2], sys.argv[3], sys.argv[4])
-    elif sys.argv[1] == "replaceBitOrAdd":
-        replaceBitOrAdd(sys.argv[2], sys.argv[3], sys.argv[4])
-    elif sys.argv[1] == "CheckInternet":
-        internet_on(sys.argv[2])
-    elif sys.argv[1] == "CheckUpdate":
-        checkUpdate(sys.argv[2])
-    elif sys.argv[1] == "CompareVersion":
-        compareVersions(sys.argv[2], sys.argv[3])
-    elif sys.argv[1] == "updatePiNet":
-        updatePiNet()
-    elif sys.argv[1] == "triggerInstall":
-        downloadFile("http://bit.ly/pinetinstall1", "/dev/null")
-    elif sys.argv[1] == "checkKernelFileUpdateWeb":
-        checkKernelFileUpdateWeb()
-    elif sys.argv[1] == "checkKernelUpdater":
-        checkKernelUpdater()
-    elif sys.argv[1] == "installCheckKernelUpdater":
-        installCheckKernelUpdater()
-    elif sys.argv[1] == "previousImport":
-        previousImport()
-    elif sys.argv[1] == "importFromCSV":
-        importFromCSV(sys.argv[2], sys.argv[3])
-    elif sys.argv[1] == "checkIfFileContainsString":
-        checkIfFileContains(sys.argv[2], sys.argv[3])
+if __name__ == '__main__':
+    main(*sys.argv[1:])
