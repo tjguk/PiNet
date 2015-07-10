@@ -2,6 +2,7 @@
 import os, sys
 import shutil
 import tempfile
+import test.support
 import unittest
 
 #
@@ -126,8 +127,9 @@ class TestDownloads(TestPiNet):
             self.assertIn("PiNet, A system for setting up and managing a classroom set of Raspberry Pis", f.read())
 
     def test_downloadFile_InvalidURL(self):
-        result = pinet_functions.downloadFile(self.url + "does-not-exist", self.filepath)
-        self.assertFalse(result)
+        with test.support.captured_stdout() as stdout:
+            result = pinet_functions.downloadFile(self.url + "does-not-exist", self.filepath)
+            self.assertFalse(result)
 
 class TestVersions(TestPiNet):
     
@@ -158,7 +160,7 @@ class TestConfigParameter(TestPiNet):
         self.assertEqual(pinet_functions.getConfigParameter(self.filepath, "version="), "1234")
 
     def test_getConfigParameter_not_present(self):
-        self.assertEqual(pinet_functions.getConfigParameter(self.filepath, "not-present="), 0)
+        self.assertEqual(pinet_functions.getConfigParameter(self.filepath, "not-present="), None)
 
 class TestFileOperations(TestPiNet):
     

@@ -163,22 +163,12 @@ def compareVersions(local, web):
     """
     Compares 2 version numbers to decide if an update is required.
     """
-    web = str(web).split(".")
-    local = str(local).split(".")
-    if int(web[0]) > int(local[0]):
-        returnData(1)
-        return True
-    else:
-        if int(web[1]) > int(local[1]):
-            returnData(1)
-            return True
-        else:
-            if int(web[2]) > int(local[2]):
-                returnData(1)
-                return True
-            else:
-                returnData(0)
-                return False
+    local_version = tuple(int(i) for i in local.split("."))
+    web_version = tuple(int(i) for i in web.split("."))
+    web_is_newer = web_version > local_version
+    returnData(web_is_newer)
+    return web_is_newer
+
 CompareVersion = compareVersions
 
 def getConfigParameter(filep, searchfor):
@@ -188,7 +178,7 @@ def getConfigParameter(filep, searchfor):
             if line.startswith(searchfor):
                 return line[len(searchfor):]
         else:
-            return 0
+            return None
 
 def returnData(data):
     with open(DATA_TRANSFER_FILEPATH, "w+") as text_file:
@@ -395,8 +385,8 @@ def checkKernelUpdater():
     import os.path
     if os.path.isfile("/opt/ltsp/armhf/etc/init.d/kernelCheckUpdate.sh"):
 
-        currentVersion = int(getConfigParameter("/opt/ltsp/armhf/etc/init.d/kernelCheckUpdate.sh", "version="))
-        newVersion = int(getConfigParameter("/tmp/kernelCheckUpdate.sh", "version="))
+        currentVersion = int(getConfigParameter("/opt/ltsp/armhf/etc/init.d/kernelCheckUpdate.sh", "version=") or 0)
+        newVersion = int(getConfigParameter("/tmp/kernelCheckUpdate.sh", "version=") or 0)
         if currentVersion < newVersion:
             installCheckKernelUpdater()
             returnData(1)
