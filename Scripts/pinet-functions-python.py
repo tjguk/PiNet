@@ -17,6 +17,7 @@ basicConfig(level=WARNING)
 import sys, os
 from subprocess import Popen, PIPE
 import time
+import urllib.request, urllib.error
 
 DATA_TRANSFER_FILEPATH = "/tmp/ltsptmp"
 PINET_CONF_FILEPATH = "/etc/pinet"
@@ -127,8 +128,6 @@ def downloadFile(url="http://bit.ly/pinetinstall1", saveloc="/dev/null"):
     Custom header is required to allow access to all pages.
     """
     import traceback
-    import urllib.request
-    import urllib.error
     req = urllib.request.Request(url)
     req.add_header('User-agent', 'Mozilla 5.10')
     try:
@@ -224,9 +223,9 @@ def replaceLineOrAdd(file, string, newString):
     Pass it a text file in list form and it will search for strings.
     If it finds a string, it will replace that entire line with newString
     """
-    new_lines = [newString if l == string else l for l in lines_from_file(file)]
+    lines = [newString if l == string else l for l in lines_from_file(file)]
     with open(file, "w") as outf:
-        outf.writelines(l + "\n" for l in new_lines)
+        outf.writelines(l + "\n" for l in lines)
 
 def replaceBitOrAdd(file, string, newString):
     """
@@ -234,31 +233,29 @@ def replaceBitOrAdd(file, string, newString):
     Pass it a text file in list form and it will search for strings.
     If it finds a string, it will replace that exact string with newString
     """
-    with open(file) as inf:
-        lines = [l.replace(string, newString) for l in inf]
+    lines = [l.replace(string, newString) for l in  lines_from_file(file)]
     with open(file, "w") as outf:
-        outf.writelines(lines)
+        outf.writelines(l + "\n" for l in lines)
 
 def internet_on(timeoutLimit, returnType = True):
     """
     Checks if there is an internet connection.
     If there is, return a 0, if not, return a 1
     """
-    import urllib.request
-    #print("Checking internet")
     try:
-        response=urllib.request.urlopen('http://18.62.0.96',timeout=int(timeoutLimit))
+        urllib.request.urlopen('http://18.62.0.96', timeout=int(timeoutLimit))
         returnData(0)
-        #print("returning 0")
         return True
-    except:  pass
+    except urllib.error.URLError:  
+        pass
+    
     try:
-        response=urllib.request.urlopen('http://74.125.228.100',timeout=int(timeoutLimit))
+        urllib.request.urlopen('http://74.125.228.100', timeout=int(timeoutLimit))
         returnData(0)
-        #print("returning 0")
         return True
-    except:  pass
-    #print("Reached end, no internet")
+    except:  
+        pass
+    
     returnData(1)
     return False
 CheckInternet = internet_on
@@ -267,20 +264,25 @@ def updatePiNet():
     """
     Fetches most recent PiNet and PiNet-functions-python.py
     """
-    ReleaseBranch = getReleaseChannel()
+    
+    pinet_root = "/home/%s/pinet" % (os.environ['SUDO_USER'])
     try:
-        os.remove("/home/"+os.environ['SUDO_USER']+"/pinet")
-    except: pass
+        os.remove(pinet_home)
+    except OSError: 
+        warn("Unable to remove %s", pinet_home)
+    
+    RawBranch = RawRepository + "/" + getReleaseChannel()
     print("")
     print("----------------------")
     print("Installing update")
     print("----------------------")
     print("")
     download = True
-    if not downloadFile(RawRepository +"/" + ReleaseBranch + "/pinet", "/usr/local/bin/pinet"):
+    if not downloadFile(RawBranch + "/pinet", "/usr/local/bin/pinet"):
         download = False
-    if not downloadFile(RawRepository +"/" + ReleaseBranch + "/Scripts/pinet-functions-python.py", "/usr/local/bin/pinet-functions-python.py"):
+    if not downloadFile(RawBranch + "/Scripts/pinet-functions-python.py", "/usr/local/bin/pinet-functions-python.py"):
         download = False
+    
     if download:
         print("----------------------")
         print("Update complete")
@@ -300,11 +302,10 @@ def checkUpdate2():
     """
     Grabs the xml commit log to check for releases. Picks out most recent release and returns it.
     """
-
-    loc = "/tmp/raspiupdate.txt"
-    downloadFile("http://bit.ly/pinetcheckmaster", loc)
+    temp_filepath = tempfile.mktemp(".txt")
+    downloadFile("http://bit.ly/pinetcheckmaster", temp_filepath)
     from xml.dom import minidom
-    xmldoc = minidom.parse(loc)
+    xmldoc = minidom.parse(temp_filepath)
     version = xmldoc.getElementsByTagName('title')[1].firstChild.nodeValue
     version = cleanStrings([version,])[0]
     if version.find("Release") != -1:
@@ -315,13 +316,9 @@ def checkUpdate2():
         print("No release update found!")
 
 def GetVersionNum(data):
-    for i in range(0, len(data)):
-        bob = data[i][0:8]
-        if data[i][0:7] == "Release":
-            bob = data[i]
-            version = str(data[i][8:len(data[i])]).rstrip()
-            return version
-
+    for item in [l.strip() for l in data]:
+        if item.startswith("Release"):
+            return item[1 + len("Release"):]
 
 def checkUpdate(currentVersion):
     ReleaseBranch = getReleaseChannel()

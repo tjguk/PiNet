@@ -164,6 +164,10 @@ class TestConfigParameter(TestPiNet):
 
     def test_getConfigParameter_not_present(self):
         self.assertEqual(pinet_functions.getConfigParameter(self.filepath, "not-present="), None)
+    
+    def test_GetVersionNum(self):
+        lines = ["Release=1234"]
+        self.assertEqual(pinet_functions.GetVersionNum(lines), "1234")
 
 class TestFileOperations(TestPiNet):
     
