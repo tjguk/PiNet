@@ -27,6 +27,11 @@ RawRepositoryBase="https://raw.github.com/pinet/"
 Repository=RepositoryBase + RepositoryName
 RawRepository=RawRepositoryBase + RepositoryName
 
+def lines(filepath):
+    with open(filepath) as f:
+        for line in f:
+            yield line.strip()
+
 def getTextFile(filep):
     """
     Opens the text file and goes through line by line, appending it to the filelist list.
