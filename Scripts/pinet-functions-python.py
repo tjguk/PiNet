@@ -55,8 +55,7 @@ def getTextFile(filep):
     Each line is a new object in the list
 
     """
-    with open(filep) as f:
-        return list(f)
+    return lines_from_file(filep, strip=False)
 
 def removeN(filelist):
     """
@@ -142,9 +141,9 @@ def downloadFile(url="http://bit.ly/pinetinstall1", saveloc="/dev/null"):
         with urllib.request.urlopen(req) as f:
             with open(saveloc, "wb") as text_file:
                 text_file.write(f.read())
-            return True
+                return True
     except urllib.error.URLError:
-        print(traceback.format_exc())
+        logger.exception("Problem downloading file")
         return False
 
 triggerInstall = downloadFile
