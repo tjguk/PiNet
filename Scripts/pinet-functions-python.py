@@ -36,10 +36,10 @@ def export(function):
     _exported[function.__name__] = function
     return function
 
-def lines_from_file(filepath):
+def lines_from_file(filepath, strip=True):
     with open(filepath) as f:
         for line in f:
-            yield line.strip()
+            yield line.strip() if strip else line
 
 def getTextFile(filep):
     """
