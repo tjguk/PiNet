@@ -12,7 +12,7 @@ import unittest
 PINET_CONF_FILEPATH = "/etc/pinet"
 if not os.path.exists(PINET_CONF_FILEPATH): 
     os.makedirs(os.path.dirname(PINET_CONF_FILEPATH))
-open(PINET_CONF_FILEPATH, "w").close()
+    open(PINET_CONF_FILEPATH, "w").close()
 pinet_functions = __import__("pinet-functions-python")
 
 def _internet_is_available():

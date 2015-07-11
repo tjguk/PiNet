@@ -64,7 +64,7 @@ def getTextFile(filep):
     Each line is a new object in the list
 
     """
-    return _lines_from_file(filep, strip=False)
+    return list(_lines_from_file(filep, strip=False))
 
 def removeN(filelist):
     """
