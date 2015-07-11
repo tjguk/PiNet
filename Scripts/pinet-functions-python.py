@@ -12,6 +12,12 @@
 #PiNet is a utility for setting up and configuring a Linux Terminal Server Project (LTSP) network for Raspberry Pi's
 
 import sys, os
+try:
+    import crypt
+except ImportError:
+    crypt = None
+import csv
+import inspect
 import logging
 import shutil
 from subprocess import Popen, PIPE, STDOUT
@@ -117,25 +123,39 @@ def findReplaceSection(textFile, string, newString):
     """
     return [line.replace(string, newString) for line in textFile]
  
-def getReleaseChannel(configFilepath="/etc/pinet"):
-    Channel = "Stable"
+def _read_configuration(config_filepath="/etc/pinet"):
+    """Read the /etc/pinet file into a dictionary
+    
+    /etc/pinet consists of a series of keyword=value lines (with some
+    repeats, it appears). Read these into a dictionary, ignoring all
+    but the first instance if any key repeats.
+    """
+    configuration = dict()
     try:
-        configFile = _lines_from_file(configFilepath)
-    except FileNotFoundError:
-        return "dev"
+        with open(config_filepath) as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    key, _, value = line.partition("=")
+                    if not key:
+                        continue
+                    elif key in configuration:
+                        logger.warn("Key %s=%s already found in %s with value %s", key, value, config_filepath, configuration[key])
+                    else:
+                        configuration[key] = value
+    except OSError as exc:
+        logger.exception("Unable to read configuration from %s", config_filepath)
 
-    search_for = "ReleaseChannel"
-    for line in configFile:
-        if line.startswith(search_for):
-            Channel = line[1 + len(search_for):]
-            break
-
-    if Channel == "Stable":
-        return "master"
-    elif Channel == "Dev":
-        return "dev"
-    else:
-        return "master"
+    return configuration
+    
+def getReleaseChannel(configFilepath="/etc/pinet"):
+    channel_branches = {
+        "Stable" : "master",
+        "Dev" : "dev"
+    }
+    configuration = _read_configuration(configFilepath)
+    release_channel = configuration.get("ReleaseChannel", "Stable")
+    return channel_branches.get(release_channel, "master")
 
 @export
 def downloadFile(url="http://bit.ly/pinetinstall1", saveloc="/dev/null"):
@@ -143,7 +163,6 @@ def downloadFile(url="http://bit.ly/pinetinstall1", saveloc="/dev/null"):
     Downloads a file from the internet using a standard browser header.
     Custom header is required to allow access to all pages.
     """
-    import traceback
     req = urllib.request.Request(url)
     req.add_header('User-agent', 'Mozilla 5.10')
     try:
@@ -261,19 +280,13 @@ def internet_on(timeoutLimit, returnType = True):
     Checks if there is an internet connection.
     If there is, return a 0, if not, return a 1
     """
-    try:
-        urllib.request.urlopen('http://18.62.0.96', timeout=int(timeoutLimit))
-        returnData(0)
-        return True
-    except urllib.error.URLError:  
-        pass
-    
-    try:
-        urllib.request.urlopen('http://74.125.228.100', timeout=int(timeoutLimit))
-        returnData(0)
-        return True
-    except:  
-        pass
+    for url in ['http://18.62.0.96', 'http://74.125.228.100']:
+        try:
+            urllib.request.urlopen(url, timeout=int(timeoutLimit))
+            returnData(0)
+            return True
+        except urllib.error.URLError:  
+            continue
     
     returnData(1)
     return False
@@ -284,12 +297,11 @@ def updatePiNet():
     """
     Fetches most recent PiNet and PiNet-functions-python.py
     """
-    
     pinet_root = "/home/%s/pinet" % (os.environ['SUDO_USER'])
     try:
-        os.remove(pinet_home)
+        os.remove(pinet_root)
     except OSError: 
-        warn("Unable to remove %s", pinet_home)
+        logger.warn("Unable to remove %s", pinet_root)
     
     RawBranch = RawRepository + "/" + getReleaseChannel()
     print("")
@@ -297,26 +309,29 @@ def updatePiNet():
     print("Installing update")
     print("----------------------")
     print("")
-    download = True
-    if not downloadFile(RawBranch + "/pinet", "/usr/local/bin/pinet"):
-        download = False
-    if not downloadFile(RawBranch + "/Scripts/pinet-functions-python.py", "/usr/local/bin/pinet-functions-python.py"):
-        download = False
     
-    if download:
+    downloads = [
+        (RawBranch + "/pinet", "/usr/local/bin/pinet"),
+        (RawBranch + "/Scripts/pinet-functions-python.py", "/usr/local/bin/pinet-functions-python.py")
+    ]
+    for url, filepath in downloads:
+        if downloadFile(url, filepath):
+            logger.info("Downloaded %s to %s", url, filepath)
+        else:
+            logger.error("Failed to download %s to %s", url, filepath)
+            print("")
+            print("----------------------")
+            print("Update failed...")
+            print("----------------------")
+            print("")
+            returnData(1)
+            return
+    else:
         print("----------------------")
         print("Update complete")
         print("----------------------")
         print("")
         returnData(0)
-    else:
-        print("")
-        print("----------------------")
-        print("Update failed...")
-        print("----------------------")
-        print("")
-        returnData(1)
-
 
 def checkUpdate2():
     """
@@ -339,26 +354,30 @@ def GetVersionNum(data):
         if item.startswith("Release"):
             return item[1 + len("Release"):]
 
+def _commits_from_feed():
+    """Given the release branch we're on, determine the RSS feed for commits
+    and generate it, one line at a time. This is usually to parse out the
+    current release.
+    """
+    feed_url = CommitsFeed.format(ReleaseBranch=getReleaseChannel())
+    logger.debug("Reading commits from %s", feed_url)
+    feed = feedparser.parse(feed_url)
+    for entry in feed.entries:
+        for content in entry.content:
+            for line in "".join(ET.fromstring(c.get("value", "")).itertext()).split("\n"):
+                yield line
+
 @export
 def checkUpdate(currentVersion):
-    
-    def version_from_entry(entry):
-        for c in entry.content:
-            lines = "".join(ET.fromstring(c.get("value", "")).itertext()).split("\n")
-            return GetVersionNum(lines)
     
     if not internet_on(5, False):
         print("No Internet Connection")
         returnData(0)
     
-    import feedparser
-    feed_url = CommitsFeed.format(ReleaseBranch=getReleaseChannel())
-    logger.debug("Feed URL %s", feed_url)
-    feed = feedparser.parse(feed_url)
-    for entry in feed.entries:
-        thisVersion = version_from_entry(entry)
-        logger.debug("Found version %s", thisVersion)
-        break
+    for line in commits_from_feed():
+        if line.startswith("Release"):
+            thisVersion = line[1 + len("Release"):]
+            break
     else:
         raise RuntimeError("Unable to determine version")
     
@@ -393,7 +412,6 @@ def checkKernelUpdater():
     ReleaseBranch = getReleaseChannel()
     downloadFile(RawRepository +"/" + ReleaseBranch + "/Scripts/kernelCheckUpdate.sh", "/tmp/kernelCheckUpdate.sh")
 
-    import os.path
     if os.path.isfile("/opt/ltsp/armhf/etc/init.d/kernelCheckUpdate.sh"):
 
         currentVersion = int(getConfigParameter("/opt/ltsp/armhf/etc/init.d/kernelCheckUpdate.sh", "version=") or 0)
@@ -498,10 +516,6 @@ def previousImport():
 
 @export
 def importFromCSV(theFile, defaultPassword, test = True):
-    import csv
-    import os
-    from sys import exit
-    import crypt
     userData=[]
     if test == "True" or True:
         test = True
@@ -553,6 +567,8 @@ def importFromCSV(theFile, defaultPassword, test = True):
         print("Error! CSV file not found at " + theFile)
 
 def fixGroupSingle(username):
+    """Add <username> into specific groups
+    """
     groups = ["adm", "dialout", "cdrom", "audio", "users", "video", "games", "plugdev", "input", "pupil"]
     for group in groups:
         subprocess.call(["usermod", "-a", "-G", group, username])
@@ -574,7 +590,8 @@ def help(command=None):
     print(module_doc + "\n" + "=" * len(module_doc) + "\n")
     
     for command, function in sorted(_exported.items()):
-        print(command)
+        signature = inspect.signature(function)
+        print("{}{}".format(command, signature))
         doc = function.__doc__
         if doc:
             print(textwrap.indent(textwrap.dedent(doc.strip("\r\n")), "    "))
