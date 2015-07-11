@@ -11,14 +11,15 @@
 
 #PiNet is a utility for setting up and configuring a Linux Terminal Server Project (LTSP) network for Raspberry Pi's
 
-
-from logging import debug, info, warning, basicConfig, INFO, DEBUG, WARNING
-basicConfig(level=WARNING)
+import logging
 import sys, os
 from subprocess import Popen, PIPE
 import time
 import urllib.request, urllib.error
 import xml.etree.ElementTree as ET
+
+logger = logging.getLogger("pinet")
+logger.setLevel(logging.WARNING)
 
 DATA_TRANSFER_FILEPATH = "/tmp/ltsptmp"
 PINET_CONF_FILEPATH = "/etc/pinet"
@@ -29,6 +30,11 @@ RepositoryName="pinet"
 RawRepositoryBase="https://raw.github.com/pinet/"
 Repository=RepositoryBase + RepositoryName
 RawRepository=RawRepositoryBase + RepositoryName
+
+_exported = {}
+def export(function):
+    _exported[function.__name__] = function
+    return function
 
 def lines_from_file(filepath):
     with open(filepath) as f:
@@ -202,9 +208,8 @@ def whiptailBox(type, title, message, returnTF ,height = "8", width= "78"):
 def whiptailSelectMenu(title, message, items):
     height, width, other = "16", "78", "5"
     cmd = ["whiptail", "--title", title, "--menu", message ,height, width, other]
-    for x in range(0, len(items)):
-        cmd.append(items[x])
-        cmd.append("a")
+    for item in items:
+        cmd.extend([item, "a"])
     cmd.append("--noitem")
     p = Popen(cmd,  stderr=PIPE)
     out, err = p.communicate()
@@ -321,18 +326,26 @@ def GetVersionNum(data):
         if item.startswith("Release"):
             return item[1 + len("Release"):]
 
+@export
 def checkUpdate(currentVersion):
+    
+    def version_from_entry(entry):
+        for c in entry.content:
+            lines = "".join(ET.fromstring(c.get("value", "")).itertext()).split("\n")
+            return GetVersionNum(lines)
+    
     if not internet_on(5, False):
         print("No Internet Connection")
         returnData(0)
     
     import feedparser
-    feed = feedparser.parse(CommitsFeed.format(ReleaseBranch=getReleaseChannel()))
+    feed_url = CommitsFeed.format(ReleaseBranch=getReleaseChannel())
+    logger.debug("Feed URL %s", feed_url)
+    feed = feedparser.parse(feed_url)
     for entry in feed.entries:
-        for c in entry.content:
-            lines = " ".join(ET.fromstring(c.get("value", "")).itertext()).split("\n")
-            thisVersion = GetVersionNum(lines)
-            break
+        thisVersion = version_from_entry(entry)
+        logger.debug("Found version %s", thisVersion)
+        break
     else:
         raise RuntimeError("Unable to determine version")
     
@@ -348,7 +361,6 @@ CheckUpdate = checkUpdate
 def checkKernelFileUpdateWeb():
     ReleaseBranch = getReleaseChannel()
     downloadFile(RawRepository +"/" + ReleaseBranch + "/boot/version.txt", "/tmp/kernelVersion.txt")
-    import os.path
     user=os.environ['SUDO_USER']
     currentPath="/home/"+user+"/PiBoot/version.txt"
     if (os.path.isfile(currentPath)) == True:
@@ -529,14 +541,13 @@ def importFromCSV(theFile, defaultPassword, test = True):
 
 def fixGroupSingle(username):
     groups = ["adm", "dialout", "cdrom", "audio", "users", "video", "games", "plugdev", "input", "pupil"]
-    for x in range(0, len(groups)):
-        cmd = ["usermod", "-a", "-G", groups[x], username]
-        p = Popen(cmd,  stderr=PIPE)
-        out, err = p.communicate()
+    for group in groups:
+        subprocess.call(["usermod", "-a", "-G", group, username])
 
+@export
 def checkIfFileContains(file, string):
     """
-    Simple function to check if a string exists in a file.
+    Does <string> exist in <file>?
     """
     with open(file) as f:
         returnData(int(any(string in line for line in f)))
@@ -554,14 +565,28 @@ def main(command=None, *args):
         print("This python script does nothing on its own, it must be passed stuff")
         return
 
-    mod = sys.modules['__main__']
-    print(mod)
     try:
-        function = getattr(mod, command)
-    except AttributeError:
+        function = _exported[command]
+    except KeyError:
         print("No such command: {}".format(command))
-    
-    return function(*args)
+    else:
+        return function(*args)
 
 if __name__ == '__main__':
+    #
+    # Set up logging to more verbose logging goes to pinet.log
+    # More straightforward logging goes to stdout
+    #
+    pinet_logger = logging.getLogger("pinet")
+    pinet_logger.setLevel(logging.DEBUG)
+    
+    file_handler = logging.FileHandler("pinet.log")
+    file_handler.setFormatter(logging.Formatter("%(levelname)s: %(funcName)s - %(message)s"))
+    file_handler.setLevel(logging.DEBUG)
+    pinet_logger.addHandler(file_handler)
+    
+    stdout_handler = logging.StreamHandler()
+    stdout_handler.setLevel(logging.INFO)
+    pinet_logger.addHandler(stdout_handler)
+    
     sys.exit(main(*sys.argv[1:]))
