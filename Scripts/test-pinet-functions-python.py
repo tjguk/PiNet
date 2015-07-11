@@ -53,7 +53,7 @@ class TestSupportFunctions(TestPiNet):
             f.writelines(self.LINES)
 
     def test_lines_from_file(self):
-        self.assertEqual(["Line 1", "Line 2", "Line 3", ""], list(pinet_functions.lines_from_file(self.filepath)))
+        self.assertEqual(["Line 1", "Line 2", "Line 3", ""], list(pinet_functions._lines_from_file(self.filepath)))
     
     def test_getTextFile(self):
         self.assertEqual(self.LINES, pinet_functions.getTextFile(self.filepath))

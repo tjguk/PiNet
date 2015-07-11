@@ -11,9 +11,11 @@
 
 #PiNet is a utility for setting up and configuring a Linux Terminal Server Project (LTSP) network for Raspberry Pi's
 
-import logging
 import sys, os
-from subprocess import Popen, PIPE
+import logging
+import shutil
+from subprocess import Popen, PIPE, STDOUT
+import textwrap
 import time
 import urllib.request, urllib.error
 import xml.etree.ElementTree as ET
@@ -33,10 +35,17 @@ RawRepository=RawRepositoryBase + RepositoryName
 
 _exported = {}
 def export(function):
+    """Decorator to tag certain functions as exported, meaning
+    that they show up as a command, with arguments, when this
+    file is run.
+    """
     _exported[function.__name__] = function
     return function
 
-def lines_from_file(filepath, strip=True):
+def _lines_from_file(filepath, strip=True):
+    """Helper function to yield lines from a file, stripping them of
+    leading & trailling whitespace by default
+    """
     with open(filepath) as f:
         for line in f:
             yield line.strip() if strip else line
@@ -55,7 +64,7 @@ def getTextFile(filep):
     Each line is a new object in the list
 
     """
-    return lines_from_file(filep, strip=False)
+    return _lines_from_file(filep, strip=False)
 
 def removeN(filelist):
     """
@@ -78,12 +87,12 @@ def writeTextFile(filelist, name):
     with open(name, "w") as f:
         f.writelines(line + "\n" for line in filelist)
     
-    info("")
-    info("------------------------")
-    info("File generated")
-    info("The file can be found at " + name)
-    info("------------------------")
-    info("")
+    logger.info("")
+    logger.info("------------------------")
+    logger.info("File generated")
+    logger.info("The file can be found at " + name)
+    logger.info("------------------------")
+    logger.info("")
 
 def getList(file):
     """
@@ -111,7 +120,7 @@ def findReplaceSection(textFile, string, newString):
 def getReleaseChannel(configFilepath="/etc/pinet"):
     Channel = "Stable"
     try:
-        configFile = lines_from_file(configFilepath)
+        configFile = _lines_from_file(configFilepath)
     except FileNotFoundError:
         return "dev"
 
@@ -128,7 +137,7 @@ def getReleaseChannel(configFilepath="/etc/pinet"):
     else:
         return "master"
 
-
+@export
 def downloadFile(url="http://bit.ly/pinetinstall1", saveloc="/dev/null"):
     """
     Downloads a file from the internet using a standard browser header.
@@ -146,7 +155,7 @@ def downloadFile(url="http://bit.ly/pinetinstall1", saveloc="/dev/null"):
         logger.exception("Problem downloading file")
         return False
 
-triggerInstall = downloadFile
+_exported['triggerInstall'] = downloadFile
 
 def stripStartWhitespaces(filelist):
     """
@@ -171,6 +180,7 @@ def cleanStrings(filelist):
 def getCleanList(filep):
     return cleanStrings(getTextFile(filep))
 
+@export
 def compareVersions(local, web):
     """
     Compares 2 version numbers to decide if an update is required.
@@ -179,10 +189,10 @@ def compareVersions(local, web):
     returnData(web_is_newer)
     return web_is_newer
 
-CompareVersion = compareVersions
+_exported['CompareVersion'] = compareVersions
 
 def getConfigParameter(filep, searchfor):
-    for line in lines_from_file(filep):
+    for line in _lines_from_file(filep):
         if line.startswith(searchfor):
             return line[len(searchfor):]
 
@@ -223,26 +233,29 @@ def whiptailSelectMenu(title, message, items):
 #---------------- Main functions -------------------
 
 
+@export
 def replaceLineOrAdd(file, string, newString):
     """
     Basic find and replace function for entire line.
     Pass it a text file in list form and it will search for strings.
     If it finds a string, it will replace that entire line with newString
     """
-    lines = [newString if l == string else l for l in lines_from_file(file)]
+    lines = [newString if l == string else l for l in _lines_from_file(file)]
     with open(file, "w") as outf:
         outf.writelines(l + "\n" for l in lines)
 
+@export
 def replaceBitOrAdd(file, string, newString):
     """
     Basic find and replace function for section.
     Pass it a text file in list form and it will search for strings.
     If it finds a string, it will replace that exact string with newString
     """
-    lines = [l.replace(string, newString) for l in  lines_from_file(file)]
+    lines = [l.replace(string, newString) for l in  _lines_from_file(file)]
     with open(file, "w") as outf:
         outf.writelines(l + "\n" for l in lines)
 
+@export
 def internet_on(timeoutLimit, returnType = True):
     """
     Checks if there is an internet connection.
@@ -264,8 +277,9 @@ def internet_on(timeoutLimit, returnType = True):
     
     returnData(1)
     return False
-CheckInternet = internet_on
+_exported['CheckInternet'] = internet_on
 
+@export
 def updatePiNet():
     """
     Fetches most recent PiNet and PiNet-functions-python.py
@@ -355,8 +369,9 @@ def checkUpdate(currentVersion):
         print("No updates found")
         returnData(0)
 
-CheckUpdate = checkUpdate
+_exported['CheckUpdate'] = checkUpdate
 
+@export
 def checkKernelFileUpdateWeb():
     ReleaseBranch = getReleaseChannel()
     downloadFile(RawRepository +"/" + ReleaseBranch + "/boot/version.txt", "/tmp/kernelVersion.txt")
@@ -395,9 +410,8 @@ def checkKernelUpdater():
         returnData(1)
         return False
 
+@export
 def installCheckKernelUpdater():
-    import shutil
-    from subprocess import Popen, PIPE, STDOUT
     shutil.copy("/tmp/kernelCheckUpdate.sh", "/opt/ltsp/armhf/etc/init.d/kernelCheckUpdate.sh")
     Popen(['ltsp-chroot', '--arch', 'armhf', 'chmod', '755', '/etc/init.d/kernelCheckUpdate.sh'], stdout=PIPE, stderr=PIPE, stdin=PIPE)
     process = Popen(['ltsp-chroot', '--arch', 'armhf', 'update-rc.d', 'kernelCheckUpdate.sh', 'defaults'], stdout=PIPE, stderr=PIPE, stdin=PIPE)
@@ -406,8 +420,6 @@ def installCheckKernelUpdater():
 def displayChangeLog(version):
     ReleaseBranch = getReleaseChannel()
     version = "Release " + version
-    import feedparser
-    import xml.etree.ElementTree
     d = feedparser.parse(Repository +'/commits/' +ReleaseBranch + '.atom')
     releases = []
     for x in range(0, len(d.entries)):
@@ -446,6 +458,7 @@ def displayChangeLog(version):
     else:
         return "ERROR"
 
+@export
 def previousImport():
     items = ["passwd", "group", "shadow", "gshadow"]
     #items = ["group",]
@@ -483,6 +496,7 @@ def previousImport():
         debug(etc)
         writeTextFile(etc, etcLoc)
 
+@export
 def importFromCSV(theFile, defaultPassword, test = True):
     import csv
     import os
@@ -550,24 +564,33 @@ def checkIfFileContains(file, string):
     """
     with open(file) as f:
         returnData(int(any(string in line for line in f)))
+_exported['checkIfFileContainsString'] = checkIfFileContains
 
-def _test(*args, **kwargs):
-    print("_test", args, kwargs)
+@export
+def help(command=None):
+    """Display all commands with their description in alphabetical order
+    """
+    module_doc = sys.modules['__main__'].__doc__ or "PiNet"
+    print(module_doc + "\n" + "=" * len(module_doc) + "\n")
     
+    for command, function in sorted(_exported.items()):
+        print(command)
+        doc = function.__doc__
+        if doc:
+            print(textwrap.indent(textwrap.dedent(doc.strip("\r\n")), "    "))
+        else:
+            print()
+
 #------------------------------Main program-------------------------
 
-def main(command=None, *args):
+def main(command="help", *args):
     """Dispatch on command name, passing all remaining parameter to the
     module-level function.
     """
-    if not command:
-        print("This python script does nothing on its own, it must be passed stuff")
-        return
-
     try:
         function = _exported[command]
     except KeyError:
-        print("No such command: {}".format(command))
+        logger.warn("No such command: %s", command)
     else:
         return function(*args)
 
