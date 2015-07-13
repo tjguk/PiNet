@@ -31,6 +31,8 @@ logger.setLevel(logging.WARNING)
 
 DATA_TRANSFER_FILEPATH = "/tmp/ltsptmp"
 PINET_CONF_FILEPATH = "/etc/pinet"
+DEFAULT_RELEASE_CHANNEL = "Stable"
+DEFAULT_GIT_BRANCH = "master"
 
 RepositoryBase = "https://github.com/pinet/"
 CommitsFeed = "https://github.com/PiNet/PiNet/commits/{ReleaseBranch}.atom"
@@ -39,23 +41,9 @@ RawRepositoryBase="https://raw.github.com/pinet/"
 Repository=RepositoryBase + RepositoryName
 RawRepository=RawRepositoryBase + RepositoryName
 
-_exported = {}
-def export(function):
-    """Decorator to tag certain functions as exported, meaning
-    that they show up as a command, with arguments, when this
-    file is run.
-    """
-    _exported[function.__name__] = function
-    return function
-
-def _lines_from_file(filepath, strip=True):
-    """Helper function to yield lines from a file, stripping them of
-    leading & trailling whitespace by default
-    """
-    with open(filepath) as f:
-        for line in f:
-            yield line.strip() if strip else line
-
+#
+# TODO: Deprecated functions; left here for now
+#
 def getTextFile(filep):
     """
     Opens the text file and goes through line by line, appending it to the filelist list.
@@ -83,6 +71,50 @@ def blankLineRemover(filelist):
     Removes blank lines in the file.
     """
     return [line for line in filelist if line.strip()]
+#
+# End of deprecated functions
+#
+
+_exported = {}
+def export(function):
+    """Decorator to tag certain functions as exported, meaning
+    that they show up as a command, with arguments, when this
+    file is run.
+    """
+    _exported[function.__name__] = function
+    return function
+
+def _lines_from_file(filepath, strip=True):
+    """Generate the lines of a file one at a time
+    
+    :returns: a generator over each line of the file
+    :filepath: the full path to the file
+    :strip: leading & trailing whitespace are stripped unless this is False
+    
+    Wrap the common case of reading all lines from a file so the
+    file is opened & closed via a context manager. This is mostly
+    useful when doing this inside some other block below.
+    """
+    with open(filepath) as f:
+        for line in f:
+            if strip:
+                yield line.strip()
+            else:
+                yield line
+
+def list_from_file(filepath, strip=True, ignore_blanks=True):
+    """Return a list of strings, each corresponding to a line in <filepath>
+    
+    :returns: a list of lines
+    :strip: Leading & trailing whitespace are stripped unless this is False
+    :ignore_blanks: Lines which are empty are skipped unless this is False
+    """
+    lines = []
+    for line in _lines_from_file(filepath, strip=strip):
+        if ignore_blanks and line == "":
+            continue
+        lines.append(line)
+    return lines
 
 def writeTextFile(filelist, name):
     """
@@ -100,20 +132,19 @@ def writeTextFile(filelist, name):
     logger.info("------------------------")
     logger.info("")
 
-def getList(file):
-    """
-    Creates list from the passed text file with each line a new object in the list
-    """
-    with open(file) as f:
-        return [l.strip("\n") for l in f]
-
 def findReplaceAnyLine(textFile, string, newString):
     """
     Basic find and replace function for entire line.
     Pass it a text file in list form and it will search for strings.
     If it finds a string, it will replace the entire line with newString
     """
-    return [newString if string in line else line for line in textFile]
+    lines = []
+    for line in textFile:
+        if string in line:
+            lines.append(newString)
+        else:
+            lines.append(lines)
+    return lines
 
 def findReplaceSection(textFile, string, newString):
     """
@@ -124,7 +155,10 @@ def findReplaceSection(textFile, string, newString):
     return [line.replace(string, newString) for line in textFile]
  
 def _read_configuration(config_filepath="/etc/pinet"):
-    """Read the /etc/pinet file into a dictionary
+    """Read a configuration file, typically /etc/pinet, file into a dictionary
+    
+    :returns: a dictionary corresponding to the configuration file
+    :config_filepath: the path to the configuration file
     
     /etc/pinet consists of a series of keyword=value lines (with some
     repeats, it appears). Read these into a dictionary, ignoring all
@@ -132,36 +166,63 @@ def _read_configuration(config_filepath="/etc/pinet"):
     """
     configuration = dict()
     try:
-        with open(config_filepath) as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    key, _, value = line.partition("=")
-                    if not key:
-                        continue
-                    elif key in configuration:
-                        logger.warn("Key %s=%s already found in %s with value %s", key, value, config_filepath, configuration[key])
-                    else:
-                        configuration[key] = value
+        for line in _lines_from_file(config_filepath, strip=True):
+            if line:
+                key, _, value = line.partition("=")
+                if not key:
+                    continue
+                elif key in configuration:
+                    logger.warn("Key %s=%s already found in %s with value %s", key, value, config_filepath, configuration[key])
+                else:
+                    configuration[key] = value
     except OSError as exc:
         logger.exception("Unable to read configuration from %s", config_filepath)
 
     return configuration
     
 def getReleaseChannel(configFilepath="/etc/pinet"):
+    """Return the git branch corresponding to the active release channel
+    
+    :returns: a string representing a git branch
+    :configFilepath: the path to the PiNet configuration file
+    
+    When installing PiNet you can select the Stable or the Development
+    channel. These correspond to the master and dev branches respectively
+    in the PiNet git repo.
+    """
     channel_branches = {
         "Stable" : "master",
         "Dev" : "dev"
     }
     configuration = _read_configuration(configFilepath)
-    release_channel = configuration.get("ReleaseChannel", "Stable")
-    return channel_branches.get(release_channel, "master")
+    
+    #
+    # Warn if no release channel was found, and use a default
+    #
+    if "ReleaseChannel" not in configuration:
+        logger.warn("No release channel found in %s; assuming %s", configFilepath, DEFAULT_RELEASE_CHANNEL)
+        release_channel = DEFAULT_RELEASE_CHANNEL
+    else:
+        release_channel = configuration['ReleaseChannel']
+    
+    #
+    # Warn if no branch found to match the release channel, and use a default
+    #
+    if release_channel not in channel_branches:
+        logger.warn("No branch corresponds to release channel %s; assuming %s", release_channel, DEFAULT_GIT_BRANCH)
+        return DEFAULT_GIT_BRANCH
+    else:
+        return channel_branches[release_channel]
 
 @export
-def downloadFile(url="http://bit.ly/pinetinstall1", saveloc="/dev/null"):
-    """
-    Downloads a file from the internet using a standard browser header.
-    Custom header is required to allow access to all pages.
+def downloadFile(url="http://bit.ly/pinetinstall1", saveloc=os.devnull):
+    """Download a file and save it to the filesystem
+    
+    :returns: True if successful, False otherwise
+    :url: the URL to download from
+    :saveloc: the filesystem location to save to
+
+    NB a custom header tweaks the User-agent to allow access to all pages   
     """
     req = urllib.request.Request(url)
     req.add_header('User-agent', 'Mozilla 5.10')
@@ -171,7 +232,7 @@ def downloadFile(url="http://bit.ly/pinetinstall1", saveloc="/dev/null"):
                 text_file.write(f.read())
                 return True
     except urllib.error.URLError:
-        logger.exception("Problem downloading file")
+        logger.exception("Problem downloading %s to %s", url, saveloc)
         return False
 
 _exported['triggerInstall'] = downloadFile
@@ -199,13 +260,23 @@ def cleanStrings(filelist):
 def getCleanList(filep):
     return cleanStrings(getTextFile(filep))
 
+def _version_from_string(version_string):
+    """Convert a 'x.y.z' version string into the equivalent tuple
+    
+    Assumes an integer version, eg 1.2.10, as all version segments
+    will be compared numerically.
+    """
+    return tuple(int(segment) for segment in version_string.split("."))
+
 @export
 def compareVersions(local, web):
     """
     Compares 2 version numbers to decide if an update is required.
     """
-    web_is_newer = tuple(int(i) for i in web.split(".")) > tuple(int(i) for i in local.split("."))
-    returnData(web_is_newer)
+    web_version = _version_from_string(web)
+    local_version = _version_from_string(local)
+    web_is_newer = web_version > local_version
+    returnData(int(web_is_newer))
     return web_is_newer
 
 _exported['CompareVersion'] = compareVersions
