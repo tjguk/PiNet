@@ -264,7 +264,8 @@ def _version_from_string(version_string):
     """Convert a 'x.y.z' version string into the equivalent tuple
     
     Assumes an integer version, eg 1.2.10, as all version segments
-    will be compared numerically.
+    will be compared numerically via Python's usual tuple-comparison
+    semantics
     """
     return tuple(int(segment) for segment in version_string.split("."))
 
@@ -276,6 +277,7 @@ def compareVersions(local, web):
     web_version = _version_from_string(web)
     local_version = _version_from_string(local)
     web_is_newer = web_version > local_version
+    
     returnData(int(web_is_newer))
     return web_is_newer
 
